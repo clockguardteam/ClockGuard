@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './PayrollTable.css';
 import { api } from '../services/apiClient';
 
-function PayrollTable({ employees, onEmployeeUpdate }) {
+function PayrollTable({ employees, onEmployeeUpdate, hoursLoading = false }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [formData, setFormData] = useState({ name: '', hourly_rate: '' });
@@ -75,15 +75,23 @@ function PayrollTable({ employees, onEmployeeUpdate }) {
           <tbody>
             {employees.map((employee) => {
               const wageRate = employee.wageRate || employee.hourly_rate || 0;
-              const totalHours = employee.totalHours || 0;
-              
+              const rawHours = employee.totalHours ?? employee.total_hours;
+              const parsedHours =
+                rawHours == null || rawHours === '' ? 0 : Number(rawHours);
+              const totalHours = Number.isFinite(parsedHours) ? parsedHours : 0;
+              const hoursPayPlaceholder = hoursLoading ? 'Calculating...' : null;
+
               return (
                 <tr key={employee.id}>
                   <td>{employee.name}</td>
                   <td>{employee.email || 'N/A'}</td>
                   <td>${wageRate.toFixed(2)}/hr</td>
-                  <td>{totalHours.toFixed(2)}</td>
-                  <td>${(wageRate * totalHours).toFixed(2)}</td>
+                  <td>
+                    {hoursPayPlaceholder ?? totalHours.toFixed(2)}
+                  </td>
+                  <td>
+                    {hoursPayPlaceholder ?? `$${(wageRate * totalHours).toFixed(2)}`}
+                  </td>
                   <td>
                     <button
                       className="edit-btn"
