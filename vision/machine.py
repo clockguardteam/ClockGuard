@@ -303,10 +303,10 @@ def run_camera_loop(mode="scanner", emp_data=None, is_locked=False,org_id=None):
                                 overlay = frame.copy()
                                 cv2.rectangle(overlay, (0, 0), (frame.shape[1], frame.shape[0]), (0, 255, 0), -1)
                                 cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame) # 30% transparent green tint
-                                cv2.putText(frame, f"{greeting}, {employee.upper()}!", (x_start - 30, y_start - 50), 
+                                cv2.putText(frame, f"{greeting}!", (x_start - 30, y_start - 50), 
                                         cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
                                         
-                                print(f"[API] Match found: {employee}, Action: {action}")
+                                print(f"[API] Match found:, Action: {action}")
 
                             elif response.status_code == 404:
                                 # 404 red screen
