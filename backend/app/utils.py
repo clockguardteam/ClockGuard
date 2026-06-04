@@ -63,16 +63,16 @@ def send_payroll_email(
             server.login(GMAIL_APP_EMAIL, GMAIL_APP_PASSWORD)
             server.sendmail(GMAIL_APP_EMAIL, employee_email, msg.as_string())
 
-        logger.info(f"Payroll email sent to {_mask_email(employee_email)}")
+        logger.info("Payroll email sent successfully")
 
     except smtplib.SMTPAuthenticationError:
         logger.error("SMTP authentication failed — check credentials")
 
     except smtplib.SMTPException as e:
-        logger.error(f"SMTP error sending email to {_mask_email(employee_email)}: {e}")
+        logger.error(f"SMTP error sending payroll email: {e}")
 
     except Exception as e:
-        logger.exception(f"Unexpected error sending email to {_mask_email(employee_email)}")
+        logger.exception("Unexpected error sending payroll email")
 
 def create_response(
     success: bool,
