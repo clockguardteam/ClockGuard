@@ -15,6 +15,29 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def _mask_email(email: str) -> str:
+    try:
+        local, domain = email.split("@", 1)
+        if not local or not domain:
+            return "[redacted-email]"
+
+        masked_local = (
+            local[0] + "*" * max(len(local) - 2, 0) + local[-1]
+            if len(local) > 1 else "*"
+        )
+
+        domain_parts = domain.split(".")
+        domain_name = domain_parts[0]
+        tld = ".".join(domain_parts[1:]) if len(domain_parts) > 1 else ""
+        masked_domain_name = (
+            domain_name[0] + "*" * max(len(domain_name) - 2, 0) + domain_name[-1]
+            if len(domain_name) > 1 else "*"
+        )
+
+        return f"{masked_local}@{masked_domain_name}" + (f".{tld}" if tld else "")
+    except Exception:
+        return "[redacted-email]"
+
 def send_payroll_email(
     employee_email: str,
     total_pay: float,
@@ -40,16 +63,16 @@ def send_payroll_email(
             server.login(GMAIL_APP_EMAIL, GMAIL_APP_PASSWORD)
             server.sendmail(GMAIL_APP_EMAIL, employee_email, msg.as_string())
 
-        logger.info(f"Payroll email sent to {employee_email}")
+        logger.info(f"Payroll email sent to {_mask_email(employee_email)}")
 
     except smtplib.SMTPAuthenticationError:
         logger.error("SMTP authentication failed — check credentials")
 
     except smtplib.SMTPException as e:
-        logger.error(f"SMTP error sending email to {employee_email}: {e}")
+        logger.error(f"SMTP error sending email to {_mask_email(employee_email)}: {e}")
 
     except Exception as e:
-        logger.exception(f"Unexpected error sending email to {employee_email}")
+        logger.exception(f"Unexpected error sending email to {_mask_email(employee_email)}")
 
 def create_response(
     success: bool,
