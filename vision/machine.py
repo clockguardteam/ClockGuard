@@ -306,7 +306,7 @@ def run_camera_loop(mode="scanner", emp_data=None, is_locked=False,org_id=None):
                                 cv2.putText(frame, f"{greeting}!", (x_start - 30, y_start - 50), 
                                         cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
                                         
-                                print(f"[API] Match found:, Action: {action}")
+                                print(f"[API] Match found: Action: {action}")
 
                             elif response.status_code == 404:
                                 # 404 red screen
