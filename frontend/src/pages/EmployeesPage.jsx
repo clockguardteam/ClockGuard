@@ -1,15 +1,96 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import './EmployeesPage.css';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import PayrollTable from '../components/PayrollTable';
 import { api } from '../services/apiClient';
 import blobAccent from '../assets/Images/Blob2.png';
+import {
+  buildHoursByLogBucket,
+  logDerivedHoursForEmployee,
+} from '../utils/attendanceHoursFromLogs';
+
+/** Recent clock logs only (demo-safe; avoids full-history fetch + inflated totals). */
+const EMPLOYEES_TOTAL_HOURS_LOG_LIMIT = 200;
+
+function sumSessionHours(sessions) {
+  return sessions.reduce((sum, s) => {
+    const h = s.total_hours ?? s.totalHours;
+    const n = h == null || h === '' ? 0 : Number(h);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
+}
+
+/** Fetches all sessions per employee: uncalculated rows + payroll sums + session counts. */
+async function fetchPayrollDerivedForEmployees(employees) {
+  const allSessions = [];
+  const payrollHoursById = {};
+  const sessionCountById = {};
+
+  for (const employee of employees) {
+    const empId = employee.id ?? employee.employee_id;
+    if (empId == null || empId === '') continue;
+    const key = String(empId);
+    try {
+      const sessions = await api.payroll.getAllEmployeeSessions(empId);
+      sessionCountById[key] = sessions.length;
+      payrollHoursById[key] = sumSessionHours(sessions);
+      sessions
+        .filter((session) => !session.processed)
+        .forEach((session) => {
+          allSessions.push({ ...session, employee_name: employee.name });
+        });
+    } catch (err) {
+      console.error(`Error fetching sessions for employee ${empId}:`, err);
+      sessionCountById[key] = 0;
+      payrollHoursById[key] = 0;
+    }
+  }
+
+  allSessions.sort((a, b) => new Date(b.shift_date) - new Date(a.shift_date));
+  return {
+    uncalculatedShifts: allSessions,
+    payrollHoursById,
+    sessionCountById,
+  };
+}
+
+/** Payroll hours when that employee has ≥1 session; else hours from clock logs (IN/OUT pairs). */
+function mergePayrollAndLogHours(employees, payrollHoursById, sessionCountById, hoursByBucket) {
+  const totalHoursById = {};
+  for (const emp of employees) {
+    const empId = emp.id ?? emp.employee_id;
+    if (empId == null || empId === '') continue;
+    const key = String(empId);
+    const hasSessions = (sessionCountById[key] ?? 0) > 0;
+    const payrollH = Number(payrollHoursById[key]) || 0;
+    const logH = logDerivedHoursForEmployee(emp, hoursByBucket);
+    totalHoursById[key] = hasSessions ? payrollH : logH;
+  }
+  return totalHoursById;
+}
+
+/** Recent logs only; merge with empty payroll maps so table shows log-based hours immediately. */
+async function fetchLogBucketAndFastTotals(employees) {
+  const logs = await api.attendance
+    .getRecentLogs(EMPLOYEES_TOTAL_HOURS_LOG_LIMIT)
+    .catch((err) => {
+      console.error('Error fetching recent attendance logs:', err);
+      return [];
+    });
+  const hoursByBucket = buildHoursByLogBucket(logs);
+  const totalHoursById = mergePayrollAndLogHours(employees, {}, {}, hoursByBucket);
+  return { hoursByBucket, totalHoursById };
+}
 
 function EmployeesPage() {
   const [employees, setEmployees] = useState([]);
   const [uncalculatedShifts, setUncalculatedShifts] = useState([]);
+  const [employeeTotalHoursById, setEmployeeTotalHoursById] = useState({});
   const [loading, setLoading] = useState(true);
+  /** Recent log–based totals for PayrollTable; clears before payroll merge. */
+  const [logHoursLoading, setLogHoursLoading] = useState(true);
+  /** Per-employee payroll sessions + uncalculated shifts list. */
   const [shiftsLoading, setShiftsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingTips, setEditingTips] = useState({});
@@ -37,39 +118,56 @@ function EmployeesPage() {
   }, []);
 
   useEffect(() => {
-    const fetchUncalculatedShifts = async () => {
-      if (employees.length === 0) return;
+    if (employees.length === 0) {
+      setLogHoursLoading(false);
+      setShiftsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      setLogHoursLoading(true);
+      setShiftsLoading(true);
+
+      let hoursByBucket = {};
+      try {
+        const { hoursByBucket: bucket, totalHoursById } =
+          await fetchLogBucketAndFastTotals(employees);
+        if (cancelled) return;
+        hoursByBucket = bucket;
+        setEmployeeTotalHoursById(totalHoursById);
+      } catch (err) {
+        console.error('Error fetching recent logs for totals:', err);
+      } finally {
+        if (!cancelled) setLogHoursLoading(false);
+      }
+
+      if (cancelled) return;
 
       try {
-        setShiftsLoading(true);
-        const allSessions = [];
-        
-        for (const employee of employees) {
-          try {
-            const sessions = await api.payroll.getAllEmployeeSessions(employee.id);
-            const uncalculated = sessions.filter(session => !session.processed);
-            
-            uncalculated.forEach(session => {
-              allSessions.push({
-                ...session,
-                employee_name: employee.name,
-              });
-            });
-          } catch (err) {
-            console.error(`Error fetching sessions for employee ${employee.id}:`, err);
-          }
-        }
-
-        allSessions.sort((a, b) => new Date(b.shift_date) - new Date(a.shift_date));
-        setUncalculatedShifts(allSessions);
+        const payrollResult = await fetchPayrollDerivedForEmployees(employees);
+        if (cancelled) return;
+        setUncalculatedShifts(payrollResult.uncalculatedShifts);
+        setEmployeeTotalHoursById(
+          mergePayrollAndLogHours(
+            employees,
+            payrollResult.payrollHoursById,
+            payrollResult.sessionCountById,
+            hoursByBucket
+          )
+        );
       } catch (err) {
-        console.error('Error fetching uncalculated shifts:', err);
+        console.error('Error fetching payroll session data:', err);
       } finally {
-        setShiftsLoading(false);
+        if (!cancelled) setShiftsLoading(false);
       }
     };
 
-    fetchUncalculatedShifts();
+    run();
+    return () => {
+      cancelled = true;
+    };
   }, [employees]);
 
   const handleEmployeeUpdate = (updatedEmployee) => {
@@ -174,23 +272,36 @@ function EmployeesPage() {
       setStartDate('');
       setEndDate('');
 
-      const allSessions = [];
-      for (const employee of employees) {
-        try {
-          const sessions = await api.payroll.getAllEmployeeSessions(employee.id);
-          const uncalculated = sessions.filter(session => !session.processed);
-          uncalculated.forEach(session => {
-            allSessions.push({
-              ...session,
-              employee_name: employee.name,
-            });
-          });
-        } catch (err) {
-          console.error(`Error fetching sessions for employee ${employee.id}:`, err);
-        }
+      let hoursByBucket = {};
+      setLogHoursLoading(true);
+      setShiftsLoading(true);
+      try {
+        const { hoursByBucket: bucket, totalHoursById } =
+          await fetchLogBucketAndFastTotals(employees);
+        hoursByBucket = bucket;
+        setEmployeeTotalHoursById(totalHoursById);
+      } catch (err) {
+        console.error('Error fetching recent logs for totals:', err);
+      } finally {
+        setLogHoursLoading(false);
       }
-      allSessions.sort((a, b) => new Date(b.shift_date) - new Date(a.shift_date));
-      setUncalculatedShifts(allSessions);
+
+      try {
+        const payrollResult = await fetchPayrollDerivedForEmployees(employees);
+        setUncalculatedShifts(payrollResult.uncalculatedShifts);
+        setEmployeeTotalHoursById(
+          mergePayrollAndLogHours(
+            employees,
+            payrollResult.payrollHoursById,
+            payrollResult.sessionCountById,
+            hoursByBucket
+          )
+        );
+      } catch (err) {
+        console.error('Error fetching payroll session data:', err);
+      } finally {
+        setShiftsLoading(false);
+      }
     } catch (err) {
       setPayrollMessage({ type: 'error', text: err.message || 'Failed to process payroll.' });
     } finally {
@@ -220,6 +331,18 @@ function EmployeesPage() {
       year: 'numeric',
     });
   };
+
+  const employeesForPayroll = useMemo(
+    () =>
+      employees.map((emp) => {
+        const id = String(emp.id ?? emp.employee_id ?? '');
+        if (id && employeeTotalHoursById[id] !== undefined) {
+          return { ...emp, totalHours: employeeTotalHoursById[id] };
+        }
+        return emp;
+      }),
+    [employees, employeeTotalHoursById]
+  );
 
   return (
     <div className="employees-page">
@@ -260,8 +383,9 @@ function EmployeesPage() {
             {!loading && !error && (
               <>
                 <PayrollTable
-                  employees={employees}
+                  employees={employeesForPayroll}
                   onEmployeeUpdate={handleEmployeeUpdate}
+                  hoursLoading={logHoursLoading}
                 />
 
                 <div className="run-payroll-section">
