@@ -1,14 +1,103 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import './EmployeesPage.css';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import PayrollTable from '../components/PayrollTable';
 import { api } from '../services/apiClient';
+import blobAccent from '../assets/Images/Blob2.png';
+import {
+  buildHoursByLogBucket,
+  logDerivedHoursForEmployee,
+} from '../utils/attendanceHoursFromLogs';
+
+/** Recent clock logs only (demo-safe; avoids full-history fetch + inflated totals). */
+const EMPLOYEES_TOTAL_HOURS_LOG_LIMIT = 200;
+
+function sumSessionHours(sessions) {
+  return sessions.reduce((sum, s) => {
+    const h = s.total_hours ?? s.totalHours;
+    const n = h == null || h === '' ? 0 : Number(h);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
+}
+
+/** Fetches all sessions per employee: uncalculated rows + payroll sums + session counts. */
+async function fetchPayrollDerivedForEmployees(employees) {
+  const allSessions = [];
+  const payrollHoursById = {};
+  const sessionCountById = {};
+
+  for (const employee of employees) {
+    const empId = employee.id ?? employee.employee_id;
+    if (empId == null || empId === '') continue;
+    const key = String(empId);
+    try {
+      const sessions = await api.payroll.getAllEmployeeSessions(empId);
+      sessionCountById[key] = sessions.length;
+      payrollHoursById[key] = sumSessionHours(sessions);
+      sessions
+        .filter((session) => !session.processed)
+        .forEach((session) => {
+          allSessions.push({ ...session, employee_name: employee.name });
+        });
+    } catch (err) {
+      console.error(`Error fetching sessions for employee ${empId}:`, err);
+      sessionCountById[key] = 0;
+      payrollHoursById[key] = 0;
+    }
+  }
+
+  allSessions.sort((a, b) => new Date(b.shift_date) - new Date(a.shift_date));
+  return {
+    uncalculatedShifts: allSessions,
+    payrollHoursById,
+    sessionCountById,
+  };
+}
+
+/** Payroll hours when that employee has ≥1 session; else hours from clock logs (IN/OUT pairs). */
+function mergePayrollAndLogHours(employees, payrollHoursById, sessionCountById, hoursByBucket) {
+  const totalHoursById = {};
+  for (const emp of employees) {
+    const empId = emp.id ?? emp.employee_id;
+    if (empId == null || empId === '') continue;
+    const key = String(empId);
+    const hasSessions = (sessionCountById[key] ?? 0) > 0;
+    const payrollH = Number(payrollHoursById[key]) || 0;
+    const logH = logDerivedHoursForEmployee(emp, hoursByBucket);
+    totalHoursById[key] = hasSessions ? payrollH : logH;
+  }
+  return totalHoursById;
+}
+
+/** Recent logs only; merge with empty payroll maps so table shows log-based hours immediately. */
+async function fetchLogBucketAndFastTotals(employees) {
+  const logs = await api.attendance
+    .getRecentLogs(EMPLOYEES_TOTAL_HOURS_LOG_LIMIT)
+    .catch((err) => {
+      console.error('Error fetching recent attendance logs:', err);
+      return [];
+    });
+  const hoursByBucket = buildHoursByLogBucket(logs);
+  const totalHoursById = mergePayrollAndLogHours(employees, {}, {}, hoursByBucket);
+  return { hoursByBucket, totalHoursById };
+}
 
 function EmployeesPage() {
   const [employees, setEmployees] = useState([]);
+  const [uncalculatedShifts, setUncalculatedShifts] = useState([]);
+  const [employeeTotalHoursById, setEmployeeTotalHoursById] = useState({});
   const [loading, setLoading] = useState(true);
+  /** Recent log–based totals for PayrollTable; clears before payroll merge. */
+  const [logHoursLoading, setLogHoursLoading] = useState(true);
+  /** Per-employee payroll sessions + uncalculated shifts list. */
+  const [shiftsLoading, setShiftsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [editingTips, setEditingTips] = useState({});
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [processingPayroll, setProcessingPayroll] = useState(false);
+  const [payrollMessage, setPayrollMessage] = useState(null);
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -28,6 +117,59 @@ function EmployeesPage() {
     fetchEmployees();
   }, []);
 
+  useEffect(() => {
+    if (employees.length === 0) {
+      setLogHoursLoading(false);
+      setShiftsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      setLogHoursLoading(true);
+      setShiftsLoading(true);
+
+      let hoursByBucket = {};
+      try {
+        const { hoursByBucket: bucket, totalHoursById } =
+          await fetchLogBucketAndFastTotals(employees);
+        if (cancelled) return;
+        hoursByBucket = bucket;
+        setEmployeeTotalHoursById(totalHoursById);
+      } catch (err) {
+        console.error('Error fetching recent logs for totals:', err);
+      } finally {
+        if (!cancelled) setLogHoursLoading(false);
+      }
+
+      if (cancelled) return;
+
+      try {
+        const payrollResult = await fetchPayrollDerivedForEmployees(employees);
+        if (cancelled) return;
+        setUncalculatedShifts(payrollResult.uncalculatedShifts);
+        setEmployeeTotalHoursById(
+          mergePayrollAndLogHours(
+            employees,
+            payrollResult.payrollHoursById,
+            payrollResult.sessionCountById,
+            hoursByBucket
+          )
+        );
+      } catch (err) {
+        console.error('Error fetching payroll session data:', err);
+      } finally {
+        if (!cancelled) setShiftsLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [employees]);
+
   const handleEmployeeUpdate = (updatedEmployee) => {
     setEmployees(prevEmployees =>
       prevEmployees.map(emp =>
@@ -38,6 +180,170 @@ function EmployeesPage() {
     );
   };
 
+  const handleTipChange = (sessionId, value) => {
+    setEditingTips(prev => ({
+      ...prev,
+      [sessionId]: value,
+    }));
+  };
+
+  const handleTipBlur = async (session) => {
+    const newTipValue = editingTips[session.id];
+    
+    if (newTipValue === undefined || newTipValue === '') {
+      return;
+    }
+
+    const tipAmount = parseFloat(newTipValue);
+    if (isNaN(tipAmount) || tipAmount < 0) {
+      alert('Please enter a valid tip amount');
+      setEditingTips(prev => {
+        const updated = { ...prev };
+        delete updated[session.id];
+        return updated;
+      });
+      return;
+    }
+
+    if (tipAmount === (session.tip_amount || 0)) {
+      return;
+    }
+
+    try {
+      const updatedSession = await api.payroll.updateSession(session.id, {
+        employee_id: session.employee_id,
+        shift_date: session.shift_date,
+        clock_in_time: session.clock_in_time,
+        clock_out_time: session.clock_out_time,
+        total_hours: session.total_hours,
+        tip_amount: tipAmount,
+        total_pay: session.total_pay,
+      });
+
+      setUncalculatedShifts(prev =>
+        prev.map(s =>
+          s.id === session.id
+            ? { ...s, tip_amount: tipAmount }
+            : s
+        )
+      );
+
+      setEditingTips(prev => {
+        const updated = { ...prev };
+        delete updated[session.id];
+        return updated;
+      });
+    } catch (err) {
+      alert('Failed to update tip amount: ' + err.message);
+      setEditingTips(prev => {
+        const updated = { ...prev };
+        delete updated[session.id];
+        return updated;
+      });
+    }
+  };
+
+  const handleRunPayroll = async () => {
+    if (!startDate || !endDate) {
+      setPayrollMessage({ type: 'error', text: 'Please select both start and end dates.' });
+      return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+      setPayrollMessage({ type: 'error', text: 'Start date must be before or equal to end date.' });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to run payroll for the period from ${startDate} to ${endDate}? This will process all uncalculated shifts and send pay stub emails.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setProcessingPayroll(true);
+      setPayrollMessage(null);
+
+      const result = await api.payroll.processPayroll(startDate, endDate);
+
+      setPayrollMessage({ type: 'success', text: result.message || 'Payroll processed successfully.' });
+      setStartDate('');
+      setEndDate('');
+
+      let hoursByBucket = {};
+      setLogHoursLoading(true);
+      setShiftsLoading(true);
+      try {
+        const { hoursByBucket: bucket, totalHoursById } =
+          await fetchLogBucketAndFastTotals(employees);
+        hoursByBucket = bucket;
+        setEmployeeTotalHoursById(totalHoursById);
+      } catch (err) {
+        console.error('Error fetching recent logs for totals:', err);
+      } finally {
+        setLogHoursLoading(false);
+      }
+
+      try {
+        const payrollResult = await fetchPayrollDerivedForEmployees(employees);
+        setUncalculatedShifts(payrollResult.uncalculatedShifts);
+        setEmployeeTotalHoursById(
+          mergePayrollAndLogHours(
+            employees,
+            payrollResult.payrollHoursById,
+            payrollResult.sessionCountById,
+            hoursByBucket
+          )
+        );
+      } catch (err) {
+        console.error('Error fetching payroll session data:', err);
+      } finally {
+        setShiftsLoading(false);
+      }
+    } catch (err) {
+      setPayrollMessage({ type: 'error', text: err.message || 'Failed to process payroll.' });
+    } finally {
+      setProcessingPayroll(false);
+    }
+  };
+
+  const formatDateTime = (dateTime) => {
+    if (!dateTime) return 'N/A';
+    const date = new Date(dateTime);
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    // Split manually to avoid UTC→local timezone shift that `new Date('YYYY-MM-DD')` causes.
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const employeesForPayroll = useMemo(
+    () =>
+      employees.map((emp) => {
+        const id = String(emp.id ?? emp.employee_id ?? '');
+        if (id && employeeTotalHoursById[id] !== undefined) {
+          return { ...emp, totalHours: employeeTotalHoursById[id] };
+        }
+        return emp;
+      }),
+    [employees, employeeTotalHoursById]
+  );
+
   return (
     <div className="employees-page">
       <Navbar />
@@ -45,14 +351,136 @@ function EmployeesPage() {
         <Sidebar />
         <main className="page-content">
           <div className="content-container">
-            <h1>Employees</h1>
-            {loading && <p>Loading employees...</p>}
-            {error && <p style={{ color: 'red' }}>Error: {error}</p>}
-            {!loading && !error && (
-              <PayrollTable 
-                employees={employees} 
-                onEmployeeUpdate={handleEmployeeUpdate}
+            <section className="emp-hero">
+              <img
+                src={blobAccent}
+                alt=""
+                className="emp-hero-blob"
+                aria-hidden="true"
               />
+              <span className="section-index">[ 03 ] · ROSTER</span>
+              <h1 className="emp-hero-title">
+                YOUR<br />
+                <span className="display-title--chrome">PEOPLE.</span>
+              </h1>
+              <p className="emp-hero-lede">
+                Manage every employee's wage, edit shift records, and run
+                payroll across any window — all from a single editorial table.
+              </p>
+            </section>
+
+            {loading && (
+              <div className="emp-state">
+                <div className="logs-spinner" />
+                <p>LOADING EMPLOYEES…</p>
+              </div>
+            )}
+            {error && (
+              <div className="emp-error">
+                <span>⚠</span> {error}
+              </div>
+            )}
+            {!loading && !error && (
+              <>
+                <PayrollTable
+                  employees={employeesForPayroll}
+                  onEmployeeUpdate={handleEmployeeUpdate}
+                  hoursLoading={logHoursLoading}
+                />
+
+                <div className="run-payroll-section">
+                  <span className="section-index">[ 04 ] · PROCESS</span>
+                  <h2 className="emp-section-title">RUN PAYROLL</h2>
+                  <div className="payroll-controls">
+                    <div className="date-inputs">
+                      <div className="date-input-group">
+                        <label htmlFor="start-date">Start Date</label>
+                        <input
+                          type="date"
+                          id="start-date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          disabled={processingPayroll}
+                        />
+                      </div>
+                      <div className="date-input-group">
+                        <label htmlFor="end-date">End Date</label>
+                        <input
+                          type="date"
+                          id="end-date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          disabled={processingPayroll}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      className="run-payroll-btn"
+                      onClick={handleRunPayroll}
+                      disabled={processingPayroll || !startDate || !endDate}
+                    >
+                      {processingPayroll ? 'Processing...' : 'Run Payroll'}
+                    </button>
+                  </div>
+                  {payrollMessage && (
+                    <div className={`payroll-message ${payrollMessage.type}`}>
+                      {payrollMessage.text}
+                    </div>
+                  )}
+                </div>
+                
+                <div className="uncalculated-shifts-section">
+                  <span className="section-index">[ 05 ] · PENDING</span>
+                  <h2 className="emp-section-title">UNCALCULATED SHIFTS</h2>
+                  {shiftsLoading && <p>Loading shifts...</p>}
+                  {!shiftsLoading && uncalculatedShifts.length === 0 && (
+                    <p className="empty-message">No uncalculated shifts found.</p>
+                  )}
+                  {!shiftsLoading && uncalculatedShifts.length > 0 && (
+                    <div className="shifts-table-container">
+                      <table className="shifts-table">
+                        <thead>
+                          <tr>
+                            <th>Employee Name</th>
+                            <th>Shift Date</th>
+                            <th>Clock In</th>
+                            <th>Clock Out</th>
+                            <th>Total Hours</th>
+                            <th>Tips</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {uncalculatedShifts.map((shift) => (
+                            <tr key={shift.id}>
+                              <td>{shift.employee_name}</td>
+                              <td>{formatDate(shift.shift_date)}</td>
+                              <td>{formatDateTime(shift.clock_in_time)}</td>
+                              <td>{formatDateTime(shift.clock_out_time)}</td>
+                              <td>{shift.total_hours?.toFixed(2) || '0.00'}</td>
+                              <td>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  className="tip-input"
+                                  value={
+                                    editingTips[shift.id] !== undefined
+                                      ? editingTips[shift.id]
+                                      : shift.tip_amount || ''
+                                  }
+                                  onChange={(e) => handleTipChange(shift.id, e.target.value)}
+                                  onBlur={() => handleTipBlur(shift)}
+                                  placeholder="0.00"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </main>

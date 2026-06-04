@@ -1,8 +1,11 @@
-/* SettingsPage Styles - ClockGuard Branded */
+/* =========================================================================
+   Settings Page — themable
+   ========================================================================= */
 
 .settings-page {
   min-height: 100vh;
-  background-color: var(--color-background);
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 
 .page-layout {
@@ -12,75 +15,165 @@
 
 .page-content {
   flex: 1;
-  padding: var(--spacing-xl) var(--spacing-lg);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  min-width: 0;
 }
 
-/* Content Container (Card Style) */
 .content-container {
-  max-width: 900px;
+  position: relative;
   width: 100%;
-  background-color: var(--color-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  padding: var(--spacing-xxl);
-  border-top: 4px solid var(--color-accent);
-  animation: fadeIn 0.4s ease-in-out;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: clamp(20px, 2.5vw, 32px) clamp(20px, 4vw, 48px) 80px;
+  animation: settingsFade 0.5s ease-out;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes settingsFade {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.content-container h1 {
-  color: var(--color-primary);
-  font-size: 2.25rem;
-  margin-bottom: var(--spacing-md);
-  font-weight: 600;
+/* HERO */
+.settings-hero {
+  position: relative;
+  isolation: isolate;
+  margin-bottom: clamp(20px, 3vw, 32px);
+  padding: 8px 0 16px;
+}
+
+.settings-hero-blob {
+  position: absolute;
+  top: -30px;
+  right: -70px;
+  width: clamp(150px, 18vw, 240px);
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 20px 40px rgba(95, 227, 228, 0.2));
+  opacity: 0.45;
+  transform: rotate(10deg);
+  z-index: 0;
+}
+
+.settings-hero .section-index {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.settings-hero-title {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-display);
+  font-size: clamp(1.85rem, 4vw, 3rem);
+  line-height: 0.95;
   letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin: 0 0 10px;
 }
 
-.content-container p {
-  color: var(--color-text-secondary);
-  font-size: 1.125rem;
-  line-height: 1.7;
+.settings-description {
+  position: relative;
+  z-index: 1;
+  max-width: 540px;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 8px 0 0;
+}
+
+/* SECTIONS */
+.settings-section {
+  margin-bottom: clamp(20px, 2.5vw, 28px);
+  padding-bottom: clamp(20px, 2.5vw, 28px);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.settings-section:last-of-type {
+  border-bottom: none;
   margin-bottom: 0;
+  padding-bottom: 0;
 }
 
-/* Responsive Design */
+.settings-section .section-index {
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.settings-section h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 2.8vw, 1.85rem);
+  line-height: 0.92;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+}
+
+/* OPTION PILLS */
+.setting-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.setting-option {
+  padding: 12px 22px;
+  background: var(--bg-overlay-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.setting-option:hover {
+  background: var(--bg-overlay-medium);
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.setting-option.active {
+  background: var(--btn-bg);
+  border-color: var(--btn-bg);
+  color: var(--btn-text);
+}
+
+/* Responsive */
 @media (max-width: 768px) {
-  .page-layout {
-    flex-direction: column;
-  }
-
-  .page-content {
-    padding: var(--spacing-lg) var(--spacing-md);
-  }
-
   .content-container {
-    padding: var(--spacing-xl);
+    padding: 24px 18px 80px;
   }
-  
-  .content-container h1 {
-    font-size: 1.875rem;
+
+  .settings-hero-blob {
+    top: -30px;
+    right: -60px;
+    opacity: 0.3;
   }
-  
-  .content-container p {
-    font-size: 1rem;
+
+  .setting-options {
+    gap: 8px;
+  }
+
+  .setting-option {
+    padding: 10px 16px;
+    font-size: 0.72rem;
   }
 }
 
 @media (max-width: 480px) {
-  .content-container {
-    padding: var(--spacing-lg);
+  .setting-options {
+    flex-direction: column;
+  }
+
+  .setting-option {
+    width: 100%;
+    text-align: center;
   }
 }

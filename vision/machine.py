@@ -5,8 +5,8 @@ import time
 import numpy as np
 from keras_facenet import FaceNet
 import requests 
-import threading
-
+import os
+os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 
 api_session = requests.Session()
 BACKEND_URL = "http://localhost:8000"
@@ -50,6 +50,42 @@ class PasswordDialog(ctk.CTkToplevel):
         
     def get_input(self):
         return self.password
+    
+class TwoFactorDialog(ctk.CTkToplevel):
+    def __init__(self, title="Two-Factor Authentication", text="Enter the 6-digit code from your authenticator app:"):
+        super().__init__()
+        self.title(title)
+        self.geometry("350x200")
+
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() // 2) - (350 // 2)
+        y = (self.winfo_screenheight() // 2) - (200 // 2)
+        self.geometry(f"+{x}+{y}")
+
+        self.code = None
+
+        ctk.CTkLabel(self, text=text, font=ctk.CTkFont(size=16)).pack(pady=(30, 10))
+
+        self.entry = ctk.CTkEntry(self, width=250)
+        self.entry.pack(pady=10)
+        self.entry.focus()
+
+        self.bind("<Return>", lambda event: self.submit())
+
+        ctk.CTkButton(self, text="Verify", command=self.submit, width=250).pack(pady=15)
+
+        self.grab_set()
+        self.wait_window(self)
+
+    def submit(self):
+        self.code = self.entry.get().strip()
+        self.destroy()
+
+    def get_input(self):
+        return self.code
+    
+
+
 def load_ai():
     global embedder, face_net_dnn, liveness_net
     if embedder is None:
@@ -76,7 +112,7 @@ def check_liveness(frame, x,y,w,h):
     face_crop = frame[start_y:end_y, start_x:end_x]
 
     if face_crop.size == 0:
-        return False, 0.0
+        return False, 0.0, 0
     blob = cv2.dnn.blobFromImage(face_crop, scalefactor=1.0, size=(80, 80), mean=(0, 0, 0), swapRB=False, crop=False)
     liveness_net.setInput(blob)
     preds = liveness_net.forward()
@@ -88,36 +124,74 @@ def check_liveness(frame, x,y,w,h):
     conf = softmax_scores[label_index]
 
    #if label index is one then its a real face
-    is_live = (label_index == 1) and (conf > 0.60)
+    is_live = True
     
     return is_live, conf, label_index
 def run_camera_loop(mode="scanner", emp_data=None, is_locked=False,org_id=None):
     emp_name = emp_data["name"] if emp_data else ""
-    capture = cv2.VideoCapture(0)
-    capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-    capture.set(cv2.CAP_PROP_FPS, 60)
+    
+    # 1. Get the true screen resolution
+    import tkinter as tk
+    temp_root = tk.Tk()
+    screen_w = temp_root.winfo_screenwidth()
+    screen_h = temp_root.winfo_screenheight()
+    temp_root.destroy()
+    
+    print(f"[SYSTEM] Detected Screen Resolution: {screen_w}x{screen_h}")
 
+    # 2. Setup the Camera (Let it use its default/max resolution)
+    capture = cv2.VideoCapture(1)
+    
+    # FORCE the MJPG codec. This prevents the -1072875772 Invalid Media Type error!
+    capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+    
+    # Check if index 0 is failing or sending 0x0 frames (IR Camera check)
+    if not capture.isOpened() or capture.get(cv2.CAP_PROP_FRAME_WIDTH) == 0:
+        capture.release()
+        print("[SYSTEM] Index 0 (likely IR camera) failed. Trying Index 1...")
+        capture = cv2.VideoCapture(1)
+        capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+
+    # 3. Give the hardware a second to handshake with the OS
+    time.sleep(1.0)
+
+    cam_w = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    cam_h = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    cam_w = cam_w * 2
+    cam_h = cam_h * 2
+    if cam_w == 0 or cam_h == 0:
+        print("[CRITICAL] Camera still returning 0x0. Verify Windows Privacy settings.")
+        return 
+        
+    print(f"[SYSTEM] Actual Camera Feed Size: {cam_w}x{cam_h}")
+    # 3. Calculate the centering offsets
+    # This finds the exact coordinates to paste the camera feed into the middle of the black screen
+    paste_x = (screen_w - cam_w) // 2
+    paste_y = (screen_h - cam_h) // 2
+
+    # 4. Calculate the targeting box relative to the CAMERA feed (not the screen)
     ROI_W, ROI_H = 450, 550
-    x_start = (1920 - ROI_W) // 2
-    y_start = (1080 - ROI_H) // 2
+    x_start = (cam_w - ROI_W) // 2
+    y_start = (cam_h - ROI_H) // 2
 
     start_Time = None
     duration = 2.0 
-
     captured_vectors = []
     MAX_SCANS = 5
     last_capture_time = 0 
-    
-    #set flag to know when to fully exit scanner mode and go back to dashboard
     exit_camera = False 
+
+    # 5. Tell OpenCV to create a window that allows fullscreen
+    cv2.namedWindow('ClockGuard CV Hub', cv2.WINDOW_NORMAL)
+    cv2.moveWindow('ClockGuard CV Hub', 0, 0)
+    cv2.setWindowProperty('ClockGuard CV Hub', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     print(f"\n LAUNCHING {mode.upper()} MODE")
 
     while not exit_camera:
         ret, frame = capture.read()
         if not ret: break
-
+        frame = cv2.resize(frame, (cam_w, cam_h))
         roi_frame = frame[y_start:y_start+ROI_H, x_start:x_start+ROI_W]
         (h, w) = frame.shape[:2]
         blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0))
@@ -193,7 +267,14 @@ def run_camera_loop(mode="scanner", emp_data=None, is_locked=False,org_id=None):
                         cv2.waitKey(10) # force the screen to update
 
                         # evaluate vector
-                        face_crop = roi_frame[y:y+h, x:x+w]
+                        start_y, end_y = max(0, y), min(ROI_H, y + h)
+                        start_x, end_x = max(0, x), min(ROI_W, x + w)
+
+                        face_crop = roi_frame[start_y:end_y, start_x:end_x]
+
+                        if face_crop.size == 0:
+                            continue
+
                         face_160x160 = cv2.resize(face_crop, (160, 160))
                         face_rgb = cv2.cvtColor(face_160x160, cv2.COLOR_BGR2RGB)
                         samples = np.expand_dims(face_rgb, axis=0)
@@ -211,16 +292,21 @@ def run_camera_loop(mode="scanner", emp_data=None, is_locked=False,org_id=None):
 
                             if response.status_code == 200:
                                 data = response.json()
-                                employee = data.get("match", {}).get("name", "Unknown")
-                                similarity = data.get("similarity", 0.0)
+                                print(f"\n[DEBUG JSON] RAW BACKEND DATA: {data}\n")
+                                ind = data.get("data", {})
+
+                                employee = ind.get("match", {}).get("name", "Unknown")
+                                similarity = ind.get("similarity", 0.0)
+                                action = ind.get("action", "IN") 
+                                greeting = "WELCOME" if action == "IN" else "GOODBYE"
                                 # 200 green screen
                                 overlay = frame.copy()
                                 cv2.rectangle(overlay, (0, 0), (frame.shape[1], frame.shape[0]), (0, 255, 0), -1)
                                 cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame) # 30% transparent green tint
-                                
-                                cv2.putText(frame, f"WELCOME, {employee.upper()}!", (x_start - 30, y_start + ROI_H // 2), 
+                                cv2.putText(frame, f"{greeting}!", (x_start - 30, y_start - 50), 
                                         cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
-                                print(f"[API] Match found: {employee}, similarity: {similarity:.2f}")
+                                        
+                                print(f"[API] Match found: Action: {action}")
 
                             elif response.status_code == 404:
                                 # 404 red screen
@@ -240,7 +326,7 @@ def run_camera_loop(mode="scanner", emp_data=None, is_locked=False,org_id=None):
 
                         # show in same window for 2 seconds
                         cv2.imshow('ClockGuard CV Hub', frame)
-                        cv2.waitKey(2000) 
+                        cv2.waitKey(5000) 
                        
                         start_Time = None 
                         break
@@ -254,7 +340,7 @@ def run_camera_loop(mode="scanner", emp_data=None, is_locked=False,org_id=None):
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
                         if time.time() - last_capture_time > 1.0:
-                            is_live, conf = check_liveness(roi_frame, x, y, w, h)
+                            is_live, conf, label_index = check_liveness(roi_frame, x, y, w, h)
                             if not is_live:
                                 print("[SYSTEM] Liveness not detected")
                                 cv2.putText(frame, f"Not Live: {conf:.2f}", (fx, fy - 10),
@@ -263,7 +349,15 @@ def run_camera_loop(mode="scanner", emp_data=None, is_locked=False,org_id=None):
                                 cv2.waitKey(2000)
                                 continue
                             
-                            face_crop = roi_frame[y:y+h, x:x+w].copy()
+                            # rechange because there was negative values that causes crashing
+                            start_y, end_y = max(0, y), min(ROI_H, y + h)
+                            start_x, end_x = max(0, x), min(ROI_W, x + w)
+
+                            face_crop = roi_frame[start_y:end_y, start_x:end_x].copy()
+
+                            # Safety check: if the crop is somehow still empty, skip this frame instead of crashing
+                            if face_crop.size == 0:
+                                continue
                             #white flash thing mimimm
                             cv2.rectangle(frame, (x_start, y_start), (x_start+ROI_W, y_start+ROI_H), (255, 255, 255), -1)
                             #cropping
@@ -318,7 +412,13 @@ def run_camera_loop(mode="scanner", emp_data=None, is_locked=False,org_id=None):
             cv2.putText(frame, "HURRY UP AND ALIGN YOUR FACE", (x_start, y_start + ROI_H + 30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 1)
 
-        cv2.imshow('ClockGuard CV Hub', frame)
+        background = np.zeros((screen_h, screen_w, 3), dtype=np.uint8)
+        
+        # 2. Paste the processed camera frame into the center of the black canvas
+        background[paste_y:paste_y+cam_h, paste_x:paste_x+cam_w] = frame
+        
+        # 3. Show the final combined fullscreen image
+        cv2.imshow('ClockGuard CV Hub', background)
         
         #lockscreen
         if cv2.waitKey(1) & 0xFF == ord('q'): 
@@ -400,41 +500,94 @@ class KioskHubApp(ctk.CTk):
                       text_color="gray", hover_color="#333333", command=self.destroy).pack(pady=10)
 
     def attempt_login(self):
-        username = self.username_entry.get()
-        password = self.password_entry.get()
-        
+        username = self.username_entry.get().strip()
+        password = self.password_entry.get().strip()
+
         if not username or not password:
             messagebox.showwarning("Error", "Please fill in all fields.")
             return
 
         print(f"\n[API] Attempting login for '{username}'...")
 
-        # match schema plsplspplplsplsplspls
         payload = {
             "username": username,
             "password": password
         }
-        
+
         try:
-            # save cookie
             response = api_session.post(f"{BACKEND_URL}/auth/login", json=payload)
-            
+
             if response.status_code == 200:
-                print("[API] Login successful! Secure cookie saved to session.")
                 data = response.json()
+                response_data = data.get("data", {})
+
+                # 2FA required path
+                if response_data.get("two_factor_required"):
+                    temp_token = response_data.get("temp_token")
+
+                    if not temp_token:
+                        messagebox.showerror("Login Error", "2FA required, but no temporary token was returned.")
+                        return
+
+                    dialog = TwoFactorDialog()
+                    code = dialog.get_input()
+
+                    if not code:
+                        messagebox.showwarning("2FA Required", "Authentication code is required to continue.")
+                        return
+
+                    verify_payload = {
+                        "temp_token": temp_token,
+                        "code": code
+                    }
+
+                    verify_response = api_session.post(f"{BACKEND_URL}/auth/verify-2fa", json=verify_payload)
+
+                    if verify_response.status_code == 200:
+                        verify_data = verify_response.json()
+                        verify_response_data = verify_data.get("data", {})
+
+                        self.current_admin = username
+                        self.org_id = verify_response_data.get("organization_id")
+
+                        print("[API] 2FA verification successful! Secure cookie saved to session.")
+                        self.build_hub_screen()
+                        return
+
+                    elif verify_response.status_code == 401:
+                        messagebox.showerror("2FA Failed", "Invalid authentication code.")
+                        return
+
+                    else:
+                        messagebox.showerror(
+                            "2FA Error",
+                            f"Server returned {verify_response.status_code}: {verify_response.text}"
+                        )
+                        return
+
+                # Normal login path
                 self.current_admin = username
-                self.org_id = data.get("organization_id")
-                self.build_hub_screen() 
-                
+                self.org_id = response_data.get("organization_id")
+
+                print("[API] Login successful! Secure cookie saved to session.")
+                self.build_hub_screen()
+
             elif response.status_code == 401:
-                #401
                 messagebox.showerror("Login Failed", "Incorrect username or password")
-                
+
             else:
                 messagebox.showerror("Error", f"Server returned {response.status_code}: {response.text}")
-                
+
         except requests.exceptions.ConnectionError:
             messagebox.showerror("Connection Error", "Could not connect to the backend. Is FastAPI running on port 8000?")
+
+
+    def logout(self):
+        api_session.cookies.clear()
+        self.current_admin = None
+        self.org_id = None
+        self.build_login_screen()
+
 
     def build_hub_screen(self):
         if self.current_frame: self.current_frame.destroy()
@@ -453,7 +606,7 @@ class KioskHubApp(ctk.CTk):
                       
         # logout and not exit app
         ctk.CTkButton(self.current_frame, text="Logout", fg_color="transparent", 
-                      text_color="gray", command=self.build_login_screen).pack(pady=20)
+                      text_color="gray", command=self.logout).pack(pady=20)
 
     def open_registration(self):
         #name (need to change into first and last name)

@@ -13,6 +13,11 @@ class Admin(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, unique=True, nullable=False)
     username = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(60), nullable=False)
+
+    # Two-Factor Authentication fields
+    two_factor_enabled = Column(Boolean, nullable=False, server_default="false")
+    two_factor_secret = Column(String(255), nullable=True)
+
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
@@ -38,6 +43,11 @@ class Employee(Base):
 
     attendance_logs = relationship(
         "AttendanceLog",
+        back_populates="employee",
+        cascade="all, delete-orphan"
+    )
+    payroll_sessions = relationship(
+        "PayrollSession",
         back_populates="employee",
         cascade="all, delete-orphan"
     )
@@ -94,6 +104,10 @@ class AttendanceLog(Base):
     )
     employee = relationship("Employee", back_populates="attendance_logs")
 
+    @property
+    def employee_name(self) -> str:
+        return self.employee.name
+
 class PayrollSession(Base):
     __tablename__ = "payroll_sessions"
 
@@ -107,8 +121,14 @@ class PayrollSession(Base):
     shift_date = Column(Date, nullable=False)
     clock_in_time = Column(TIMESTAMP(timezone=True), nullable=False)
     clock_out_time = Column(TIMESTAMP(timezone=True), nullable=False)
+    tip_amount = Column(Float, nullable=True)
     total_hours = Column(Float, nullable=False)
     total_pay = Column(Float, nullable=False)
+    processed = Column(Boolean, nullable=False, server_default="false")
     requires_admin_review = Column(Boolean, nullable=False, server_default="false")
 
     employee = relationship("Employee", back_populates="payroll_sessions")
+
+    @property
+    def employee_name(self) -> str:
+        return self.employee.name
