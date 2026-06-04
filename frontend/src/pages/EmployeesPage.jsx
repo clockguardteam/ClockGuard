@@ -4,7 +4,6 @@ import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import PayrollTable from '../components/PayrollTable';
 import { api } from '../services/apiClient';
-import blobAccent from '../assets/Images/Blob2.png';
 import {
   buildHoursByLogBucket,
   logDerivedHoursForEmployee,
@@ -352,12 +351,6 @@ function EmployeesPage() {
         <main className="page-content">
           <div className="content-container">
             <section className="emp-hero">
-              <img
-                src={blobAccent}
-                alt=""
-                className="emp-hero-blob"
-                aria-hidden="true"
-              />
               <span className="section-index">[ 03 ] · ROSTER</span>
               <h1 className="emp-hero-title">
                 YOUR<br />

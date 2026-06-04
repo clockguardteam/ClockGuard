@@ -39,7 +39,7 @@
 
   /* Image filters (logos, tinted artwork) */
   --logo-filter: brightness(0);                /* logo becomes black on white */
-  --login-bg-filter: none;                     /* the login.png is already light/white */
+  --login-bg-filter: none;
 
   /* Brand chrome — silver/teal liquid metal (same in both themes) */
   --color-primary: #1d8585;

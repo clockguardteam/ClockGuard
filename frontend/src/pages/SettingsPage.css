@@ -40,20 +40,6 @@
   padding: 8px 0 16px;
 }
 
-.settings-hero-blob {
-  position: absolute;
-  top: -30px;
-  right: -70px;
-  width: clamp(150px, 18vw, 240px);
-  height: auto;
-  pointer-events: none;
-  user-select: none;
-  filter: drop-shadow(0 20px 40px rgba(95, 227, 228, 0.2));
-  opacity: 0.45;
-  transform: rotate(10deg);
-  z-index: 0;
-}
-
 .settings-hero .section-index {
   position: relative;
   z-index: 1;
@@ -145,16 +131,18 @@
   color: var(--btn-text);
 }
 
+.settings-security-note {
+  max-width: 520px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .content-container {
     padding: 24px 18px 80px;
-  }
-
-  .settings-hero-blob {
-    top: -30px;
-    right: -60px;
-    opacity: 0.3;
   }
 
   .setting-options {

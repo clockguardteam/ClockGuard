@@ -40,26 +40,6 @@
   padding: 8px 0 16px;
 }
 
-.emp-hero-blob {
-  position: absolute;
-  top: -30px;
-  right: -60px;
-  width: clamp(180px, 24vw, 320px);
-  height: auto;
-  pointer-events: none;
-  user-select: none;
-  filter: drop-shadow(0 20px 40px rgba(95, 227, 228, 0.2));
-  opacity: 0.5;
-  transform: rotate(-8deg);
-  z-index: 0;
-  animation: empBlobFloat 11s ease-in-out infinite;
-}
-
-@keyframes empBlobFloat {
-  0%, 100% { transform: rotate(-8deg) translateY(0); }
-  50%      { transform: rotate(-6deg) translateY(-10px); }
-}
-
 .emp-hero .section-index {
   position: relative;
   z-index: 1;
@@ -400,11 +380,5 @@
 @media (max-width: 640px) {
   .content-container {
     padding: 24px 18px 80px;
-  }
-
-  .emp-hero-blob {
-    top: -30px;
-    right: -60px;
-    opacity: 0.3;
   }
 }

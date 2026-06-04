@@ -40,20 +40,6 @@
   padding: 8px 0 16px;
 }
 
-.logs-hero-blob {
-  position: absolute;
-  top: -20px;
-  right: -50px;
-  width: clamp(150px, 18vw, 240px);
-  height: auto;
-  pointer-events: none;
-  user-select: none;
-  filter: drop-shadow(0 20px 40px rgba(95, 227, 228, 0.2));
-  opacity: 0.5;
-  transform: rotate(-6deg);
-  z-index: 0;
-}
-
 .logs-hero-meta {
   position: relative;
   z-index: 1;
@@ -461,12 +447,6 @@
 @media (max-width: 640px) {
   .content-container {
     padding: 24px 18px 80px;
-  }
-
-  .logs-hero-blob {
-    top: -20px;
-    right: -40px;
-    opacity: 0.35;
   }
 
   .employee-card__header {

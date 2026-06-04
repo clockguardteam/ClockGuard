@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import AboutPage from '../pages/AboutPage';
 import LoginPage from '../pages/LoginPage';
 import DashboardPage from '../pages/DashboardPage';
 import EmployeesPage from '../pages/EmployeesPage';
@@ -12,7 +13,8 @@ function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<Navigate to="/about" replace />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
@@ -20,7 +22,7 @@ function AppRouter() {
         <Route path="/employees" element={<EmployeesPage />} />
         <Route path="/attendance-logs" element={<AttendanceLogsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/about" replace />} />
       </Routes>
     </BrowserRouter>
   );

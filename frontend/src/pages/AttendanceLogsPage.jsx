@@ -3,7 +3,6 @@ import './AttendanceLogsPage.css';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import { api } from '../services/apiClient';
-import blobAccent from '../assets/Images/Blob.png';
 
 function getInitials(name) {
   if (!name) return '?';
@@ -144,12 +143,6 @@ function AttendanceLogsPage() {
         <main className="page-content">
           <div className="content-container">
             <section className="logs-hero">
-              <img
-                src={blobAccent}
-                alt=""
-                className="logs-hero-blob"
-                aria-hidden="true"
-              />
               <div className="logs-hero-meta">
                 <span className="section-index">[ 02 ] · ATTENDANCE</span>
                 {!loading && !error && (

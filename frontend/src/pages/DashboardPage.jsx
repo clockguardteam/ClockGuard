@@ -3,9 +3,6 @@ import './DashboardPage.css';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import { api } from '../services/apiClient';
-import faceVisual from '../assets/Images/CGface.png';
-import blobOne from '../assets/Images/Blob.png';
-import bgChrome from '../assets/Images/bgcg.png';
 
 function getInitials(name) {
   if (!name) return '?';
@@ -325,33 +322,33 @@ function DashboardPage() {
           <div className="dashboard-shell">
             <section className="hero hero--compact">
               <h1 className="hero-title">
-                LIVE <span className="display-title--chrome">METRICS</span>
+                PAYROLL <span className="display-title--chrome">OVERVIEW</span>
               </h1>
 
               <div className="hero-stage">
-                <div className="hero-stage__bg" aria-hidden="true" />
-                <div className="hero-stage__overlay" aria-hidden="true" />
-
-                <div className="hero-stage__corner hero-stage__corner--right">
+                <div className="hero-stage__summary">
                   <p className="hero-stage__lede">
-                    Real-time facial verification and attendance intelligence
-                    streamed onto a single command surface.
+                    Verified attendance, roster status, and payroll prep are
+                    organized in one admin workspace so routine work stays
+                    light and predictable.
                   </p>
                   <div className="hero-stage__meta-grid">
                     <span>
-                      <em>Channel</em>
-                      <strong>{isConnected ? 'ONLINE' : 'OFFLINE'}</strong>
+                      <em>Scanner feed</em>
+                      <strong>{isConnected ? 'Active' : 'Offline'}</strong>
+                    </span>
+                    <span>
+                      <em>Payroll workflow</em>
+                      <strong>Automated</strong>
                     </span>
                   </div>
                 </div>
+                <div className="hero-stage__workflow" aria-label="ClockGuard workflow">
+                  <span>Clock event</span>
+                  <span>Attendance log</span>
+                  <span>Payroll review</span>
+                </div>
               </div>
-
-              <img
-                src={faceVisual}
-                alt=""
-                className="hero-face"
-                aria-hidden="true"
-              />
             </section>
 
             {error && (
@@ -484,29 +481,11 @@ function DashboardPage() {
 
             <section
               className="workforce-section"
-              style={{ '--roster-chrome': `url(${bgChrome})` }}
             >
-              <div
-                className="workforce-section__chrome"
-                style={{ backgroundImage: `url(${bgChrome})` }}
-                aria-hidden="true"
-              />
               <div className="workforce-section__head">
-                <img
-                  src={blobOne}
-                  alt=""
-                  className="workforce-title-blob"
-                  aria-hidden="true"
-                />
                 <h2 className="workforce-section__title dashboard-section-title dashboard-section-title--roster">
                   Roster
                 </h2>
-                <img
-                  src={blobOne}
-                  alt=""
-                  className="workforce-title-blob workforce-title-blob--mirror"
-                  aria-hidden="true"
-                />
               </div>
               <div className="workforce-grid">
                 <div className="workforce-col workforce-col--in">
@@ -585,17 +564,12 @@ function DashboardPage() {
             </section>
 
             <footer className="dashboard-foot">
-              <div
-                className="dashboard-foot__chrome"
-                style={{ backgroundImage: `url(${bgChrome})` }}
-                aria-hidden="true"
-              />
               <span className="dashboard-foot__brand">
                 CLOCK
                 <span className="display-title--chrome">GUARD</span>
               </span>
               <span className="dashboard-foot__copy">
-                BIOMETRIC ATTENDANCE · POWERED BY FACIAL VERIFICATION
+                AUTOMATED ATTENDANCE AND PAYROLL WORKFLOW
               </span>
             </footer>
           </div>
