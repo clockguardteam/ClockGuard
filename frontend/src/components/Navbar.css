@@ -55,6 +55,38 @@
   gap: var(--spacing-md);
 }
 
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.navbar-link {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  transition: all var(--transition-fast);
+}
+
+.navbar-link:hover {
+  background: var(--bg-overlay-soft);
+  color: var(--text-primary);
+}
+
+.navbar-link.active {
+  background: var(--bg-overlay-medium);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
 .btn-logout {
   background: transparent;
   color: #0a0a0a;
@@ -97,6 +129,25 @@
 
   .navbar-brand {
     font-size: clamp(1.05rem, 4.2vw, 1.35rem);
+  }
+
+  .navbar-container {
+    align-items: flex-start;
+  }
+
+  .navbar-actions {
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .navbar-links {
+    gap: 6px;
+  }
+
+  .navbar-link {
+    padding: 8px 10px;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
   }
 
   .btn-logout {

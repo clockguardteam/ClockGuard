@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './SettingsPage.css';
 import Navbar from '../components/Navbar';
-import Sidebar from '../components/Sidebar';
-import blobAccent from '../assets/Images/Blob.png';
 import api from '../services/apiClient';
 import { QRCodeCanvas } from 'qrcode.react';
 import {
@@ -22,6 +20,7 @@ function SettingsPage() {
   const [setupMode, setSetupMode] = useState(false);
   const [message, setMessage] = useState('');
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+  const [securityAvailable, setSecurityAvailable] = useState(false);
 
   useEffect(() => {
     applyPreferences();
@@ -31,8 +30,10 @@ function SettingsPage() {
     try {
       const res = await api.auth.getMe();
       setIs2FAEnabled(res.data.two_factor_enabled);
+      setSecurityAvailable(true);
     } catch (err) {
       console.error(err);
+      setSecurityAvailable(false);
     }
   };
 
@@ -114,18 +115,11 @@ function SettingsPage() {
 
   return (
     <div className="settings-page">
-      <Navbar />
+      <Navbar variant="public" />
       <div className="page-layout">
-        <Sidebar />
         <main className="page-content">
           <div className="content-container">
             <section className="settings-hero">
-              <img
-                src={blobAccent}
-                alt=""
-                className="settings-hero-blob"
-                aria-hidden="true"
-              />
               <span className="section-index">[ 06 ] · PREFERENCES</span>
               <h1 className="settings-hero-title">
                 YOUR<br />
@@ -212,7 +206,14 @@ function SettingsPage() {
             <div className="settings-section">
               <h2>Security</h2>
 
-              {!is2FAEnabled && !setupMode && (
+              {!securityAvailable && (
+                <p className="settings-security-note">
+                  Sign in to manage two-factor authentication for the admin
+                  console.
+                </p>
+              )}
+
+              {securityAvailable && !is2FAEnabled && !setupMode && (
                 <button
                   className="setting-option"
                   onClick={handleEnable2FA}
@@ -221,7 +222,7 @@ function SettingsPage() {
                 </button>
               )}
 
-              {setupMode && (
+              {securityAvailable && setupMode && (
                 <div style={{ marginTop: '1rem' }}>
                   <p><strong>Secret:</strong> {qrSecret}</p>
 
@@ -259,7 +260,7 @@ function SettingsPage() {
                 </div>
               )}
 
-              {is2FAEnabled && !setupMode && (
+              {securityAvailable && is2FAEnabled && !setupMode && (
                 <div style={{ marginTop: '1rem' }}>
                   <p style={{ color: 'green', fontWeight: '500' }}>
                     2FA is enabled

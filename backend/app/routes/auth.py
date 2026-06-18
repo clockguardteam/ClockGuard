@@ -41,7 +41,7 @@ load_dotenv()
 router = APIRouter(prefix="/auth")
 
 # Configuration
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 LOGIN_SECRET = os.getenv("LOGIN_SECRET")
 IS_PROD = os.getenv("IS_PROD") == "true"

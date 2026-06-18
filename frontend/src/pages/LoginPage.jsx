@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './LoginPage.css';
-import loginBg from '../assets/Images/login.png';
+import Navbar from '../components/Navbar';
 import clockGuardLogo from '../assets/CGlogo.png';
 import api from '../services/apiClient';
 
@@ -36,23 +36,15 @@ function LoginPage() {
   };
 
   return (
-    <div
-      className="login-page"
-      style={{ backgroundImage: `url(${loginBg})` }}
-    >
+    <div className="login-page">
       <div className="login-page-vignette" aria-hidden="true" />
 
-      <header className="login-topbar">
-        <span className="login-topbar-mark">
-          CLOCK<span className="display-title--chrome">GUARD</span>
-        </span>
-        <span className="login-topbar-meta">SECURE · BIOMETRIC ACCESS</span>
-      </header>
+      <Navbar variant="public" />
 
       <main className="login-stage">
         <p className="login-eyebrow">
           <span className="login-eyebrow-line" />
-          <span className="login-eyebrow-text">[ 01 ] · ADMIN GATEWAY</span>
+          <span className="login-eyebrow-text">[ 01 ] - ADMIN SIGN IN</span>
         </p>
 
         <img src={clockGuardLogo} alt="ClockGuard" className="login-logo" />
@@ -99,7 +91,7 @@ function LoginPage() {
         </form>
 
         <p className="login-footnote">
-          PROTECTED · 256-BIT · ENCRYPTED CHANNEL
+          ATTENDANCE, ROSTER, AND PAYROLL MANAGEMENT
         </p>
       </main>
     </div>

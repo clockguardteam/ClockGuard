@@ -409,7 +409,7 @@ def run_camera_loop(mode="scanner", emp_data=None, is_locked=False,org_id=None):
 
         else:
             start_Time = None
-            cv2.putText(frame, "HURRY UP AND ALIGN YOUR FACE", (x_start, y_start + ROI_H + 30), 
+            cv2.putText(frame, "please align face", (x_start, y_start + ROI_H + 30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 1)
 
         background = np.zeros((screen_h, screen_w, 3), dtype=np.uint8)
